@@ -10,7 +10,8 @@ st.set_page_config(page_title="AI Advice Study — Opinion Portal", layout="wide
 POOL_FILE = "muhaco_annotation_pool.json"
 OUTPUT_CSV = "collected_annotations.csv"
 MAX_ANNOTATIONS_PER_CONVO = 3
-ADMIN_PASSWORD = "researcher2026"  # Researcher password to unlock CSV download
+ADMIN_NAME = "Vibhan Dutta"
+ADMIN_PASSWORD = "researcher2026"
 
 @st.cache_data
 def load_pool():
@@ -32,75 +33,117 @@ def save_annotation(row_dict):
     df = pd.concat([df, pd.DataFrame([row_dict])], ignore_index=True)
     df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8")
 
-# Initialize state
+# Initialize pool and annotations
 pool = load_pool()
 df_annotations = load_annotations()
 
-st.title("💡 AI Advice Study — Human Opinion Portal")
-
-# Simple, friendly instructions
-with st.expander("📖 HOW TO PARTICIPATE (Simple 1-Minute Guide — Click to Read)", expanded=True):
-    st.markdown("""
-    ### Thank you for helping with our university research!
-    In this study, you will read short chat conversations where a real person asked an AI (like ChatGPT) for advice on a real-life decision—such as career choices, relationship advice, buying something, or educational plans.
-
-    ---
-    ### What We Need Your Help With:
-    We want your **human common sense** to tell us what this person decided to do (or would most likely do).
-
-    #### Simple 3-Step Guide:
-    1. **Read the Chat on the Left:** Notice what country the person lives in, what their problem is, and what advice the AI gave them.
-    2. **Answer Question 1:** Did the person clearly state what they decided to do before leaving the chat?
-    3. **Answer Question 2:** 
-       - **If they stated their decision:** Simply summarize what they decided to do.
-       - **If they left without stating a final decision:** Use your best everyday judgment! Based on what they said and what country they live in, **what realistic decision do you think they would make?**  
-       *(Please write at least 2 clear sentences naming a specific choice or action).*
-    4. **Answer Question 3:** Compare your answer with our automated computer summary to see if the computer got it right.
-    """)
-
-# Sidebar: Friendly identification & Protected Download
-with st.sidebar:
-    st.header("👤 Your Details")
-    annotator_name = st.text_input("Enter Your Name:", value=st.session_state.get("annotator_name", ""))
-    if annotator_name:
-        st.session_state["annotator_name"] = annotator_name
-
-    st.divider()
-    st.header("📈 Overall Study Progress")
-    if len(pool) > 0:
-        counts = df_annotations["conversation_id"].value_counts().to_dict() if not df_annotations.empty else {}
-        completed_convos = sum(1 for item in pool if counts.get(item["conversation_id"], 0) >= MAX_ANNOTATIONS_PER_CONVO)
-        st.progress(completed_convos / len(pool))
-        st.write(f"**Completed Chats:** {completed_convos} of {len(pool)}")
-        st.write(f"**Total Submissions:** {len(df_annotations)}")
+# =====================================================================
+# SCREEN 1: WELCOME & NAME ENTRY LANDING PAGE
+# =====================================================================
+if not st.session_state.get("logged_in", False):
+    col_main1, col_main2, col_main3 = st.columns([1, 2.5, 1])
+    with col_main2:
+        st.title("💡 AI Advice Study")
+        st.subheader("Human Opinion Research Portal")
+        st.markdown("---")
         
-        if annotator_name:
-            my_subs = len(df_annotations[df_annotations["annotator_name"] == annotator_name]) if not df_annotations.empty else 0
-            st.metric("Chats You Have Reviewed", my_subs)
+        with st.container(border=True):
+            st.markdown("### 👋 Welcome! Please enter your name to begin:")
+            name_input = st.text_input("Your Full Name:", placeholder="e.g., Alex Smith").strip()
+            
+            # Special check for Vibhan Dutta admin mode
+            is_admin_user = (name_input.lower() == ADMIN_NAME.lower())
+            pwd_input = ""
+            if is_admin_user:
+                st.info("🔐 **Researcher Account Detected:** Please enter your admin password to access data export mode.")
+                pwd_input = st.text_input("Admin Password:", type="password")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🚀 Enter Portal", use_container_width=True, type="primary"):
+                if not name_input:
+                    st.error("⚠️ Please enter your name to start.")
+                elif is_admin_user and pwd_input != ADMIN_PASSWORD:
+                    st.error("❌ Incorrect researcher password.")
+                else:
+                    st.session_state["logged_in"] = True
+                    st.session_state["annotator_name"] = name_input
+                    st.session_state["is_admin"] = is_admin_user
+                    st.rerun()
 
-    st.divider()
-    st.header("🔒 Researcher Export (Protected)")
-    entered_pwd = st.text_input("Enter Researcher Password to Download:", type="password")
-    if entered_pwd == ADMIN_PASSWORD:
-        st.success("🔓 Admin Unlocked!")
-        if not df_annotations.empty:
-            st.download_button(
-                label="📥 Download All Results (CSV)",
-                data=df_annotations.to_csv(index=False).encode("utf-8"),
-                file_name="collected_annotations.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        else:
-            st.caption("No annotations collected yet.")
-    elif entered_pwd:
-        st.error("❌ Incorrect password.")
-    else:
-        st.caption("Regular participants cannot access or download research data.")
-
-if not annotator_name:
-    st.info("👈 **Please enter your Name in the left sidebar to start reviewing chats.**")
+        st.markdown("---")
+        st.markdown("""
+        #### ⚠️ Important Advisory for Reviewers:
+        To keep our scientific research fair and unbiased, **please form your own independent judgment** by reading the chat conversation first.  
+        Do not rely on or let yourself be influenced by the computer-generated summary when deciding what the person chose to do!
+        """)
     st.stop()
+
+annotator_name = st.session_state.get("annotator_name", "")
+is_admin = st.session_state.get("is_admin", False)
+
+# =====================================================================
+# SCREEN 2: RESEARCHER ADMIN DASHBOARD (ONLY FOR VIBHAN DUTTA)
+# =====================================================================
+if is_admin and not st.session_state.get("admin_test_mode", False):
+    st.title("🔐 Researcher Admin Dashboard")
+    st.caption(f"Logged in as Principal Researcher: **{annotator_name}**")
+    
+    col_stat1, col_stat2, col_stat3 = st.columns(3)
+    counts = df_annotations["conversation_id"].value_counts().to_dict() if not df_annotations.empty else {}
+    completed_convos = sum(1 for item in pool if counts.get(item["conversation_id"], 0) >= MAX_ANNOTATIONS_PER_CONVO)
+    
+    with col_stat1:
+        st.metric("Total Collected Annotations", len(df_annotations))
+    with col_stat2:
+        st.metric("Fully Annotated Chats (3/3)", f"{completed_convos} / {len(pool)}")
+    with col_stat3:
+        unique_annotators = df_annotations["annotator_name"].nunique() if not df_annotations.empty else 0
+        st.metric("Active Participants", unique_annotators)
+    
+    st.markdown("---")
+    st.subheader("📥 Export Dataset")
+    if not df_annotations.empty:
+        st.download_button(
+            label="📥 Download Complete Results Dataset (collected_annotations.csv)",
+            data=df_annotations.to_csv(index=False).encode("utf-8"),
+            file_name="collected_annotations.csv",
+            mime="text/csv",
+            use_container_width=True,
+            type="primary"
+        )
+        with st.expander("👁️ Preview Recent Submissions"):
+            st.dataframe(df_annotations.tail(15), use_container_width=True)
+    else:
+        st.info("No annotations collected yet.")
+    
+    st.markdown("---")
+    col_adm1, col_adm2 = st.columns(2)
+    with col_adm1:
+        if st.button("🔍 Enter Annotation Screen (Test / Annotate Chats)"):
+            st.session_state["admin_test_mode"] = True
+            st.rerun()
+    with col_adm2:
+        if st.button("🚪 Logout"):
+            st.session_state.clear()
+            st.rerun()
+    st.stop()
+
+# =====================================================================
+# SCREEN 3: ANNOTATION WORKFLOW PORTAL
+# =====================================================================
+
+# Top Navigation Bar
+col_top1, col_top2 = st.columns([3, 1])
+with col_top1:
+    my_subs = len(df_annotations[df_annotations["annotator_name"] == annotator_name]) if not df_annotations.empty else 0
+    st.markdown(f"👤 Reviewer: **{annotator_name}** &nbsp;|&nbsp; ✅ Completed by you: **{my_subs} chat(s)**")
+with col_top2:
+    if st.button("🚪 Switch User / Logout", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+# Prominent Anti-Anchoring Advisory
+st.warning("🧠 **Scientific Advisory:** Read the chat carefully and decide what the person did **independently** before looking at the automated computer summary at the bottom.")
 
 # Filter available pool
 counts_per_convo = df_annotations["conversation_id"].value_counts().to_dict() if not df_annotations.empty else {}
@@ -116,10 +159,9 @@ if not available_convos:
     st.success("🎉 Amazing! You have reviewed all available chats for this study. Thank you so much for your help!")
     st.stop()
 
-# Check if user just submitted and is deciding whether to continue or exit
+# Post-submission choice screen
 if st.session_state.get("just_submitted", False):
     st.markdown("---")
-    my_subs = len(df_annotations[df_annotations["annotator_name"] == annotator_name]) if not df_annotations.empty else 0
     st.success(f"🎉 **Thank you, {annotator_name}!** Your review has been saved successfully. You have reviewed **{my_subs}** chat(s) so far.")
     st.write("Would you like to review another chat, or finish your session for now?")
     
@@ -140,8 +182,8 @@ if st.session_state.get("session_finished", False):
     st.markdown("---")
     st.balloons()
     st.header("🙏 Thank You So Much for Your Help!")
-    st.write(f"Your contributions have been securely saved. You can safely close this browser window or tab now.")
-    if st.button("🔄 Start a New Session"):
+    st.write("Your contributions have been securely saved. You can safely close this browser window or tab now.")
+    if st.button("🔄 Resume Reviewing"):
         st.session_state["session_finished"] = False
         st.rerun()
     st.stop()
@@ -162,15 +204,15 @@ with col1:
         for idx, turn in enumerate(current_item["turns"]):
             if turn["role"] == "user":
                 with st.chat_message("user", avatar="🧑"):
-                    st.markdown(f"**Person Seeking Advice:**")
+                    st.markdown("**Person Seeking Advice:**")
                     st.markdown(turn["content"])
             else:
                 with st.chat_message("assistant", avatar="🤖"):
-                    st.markdown(f"**AI Assistant:**")
+                    st.markdown("**AI Assistant:**")
                     st.markdown(turn["content"])
 
 with col2:
-    st.subheader("📝 Your Questions")
+    st.subheader("📝 Your Independent Review")
     
     with st.form(key=f"form_{current_item['conversation_id']}", clear_on_submit=True):
         q1 = st.radio(
@@ -185,16 +227,17 @@ with col2:
         
         q2 = st.text_area(
             f"**Question 2. What decision did this person make (or what would they most likely do)?**\n\n"
-            f"Please write at least 2 clear sentences. Mention a specific choice, action, or plan that makes sense for someone living in **{current_item['country']}**.",
+            f"Please write at least 2 clear sentences based on your own judgment. Mention a specific choice or action that makes sense for someone living in **{current_item['country']}**.",
             height=130,
             placeholder="Example: The person decided to switch to freelance graphic design because it offers flexible working hours in their country..."
         )
         
         st.markdown("---")
+        st.caption("ℹ️ *Advisory: Please ensure you formulated Question 2 above based on your own reading of the chat before comparing below.*")
         st.info(f"**Automated Computer Summary:**\n\n\"{current_item['ai_decision_statement']}\"")
         
         q3 = st.radio(
-            "**Question 3. Does the computer summary above match what you wrote in Question 2?**",
+            "**Question 3. Does the automated computer summary above match what you wrote in Question 2?**",
             options=[
                 "Matches exactly — the computer and I agree",
                 "Mostly matches — same general idea, minor details differ",
