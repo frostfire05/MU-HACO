@@ -10,6 +10,7 @@ st.set_page_config(page_title="AI Advice Study — Opinion Portal", layout="wide
 POOL_FILE = "muhaco_annotation_pool.json"
 OUTPUT_CSV = "collected_annotations.csv"
 MAX_ANNOTATIONS_PER_CONVO = 3
+ADMIN_PASSWORD = "researcher2026"  # Researcher password to unlock CSV download
 
 @st.cache_data
 def load_pool():
@@ -57,7 +58,7 @@ with st.expander("📖 HOW TO PARTICIPATE (Simple 1-Minute Guide — Click to Re
     4. **Answer Question 3:** Compare your answer with our automated computer summary to see if the computer got it right.
     """)
 
-# Sidebar: Friendly identification & Download
+# Sidebar: Friendly identification & Protected Download
 with st.sidebar:
     st.header("👤 Your Details")
     annotator_name = st.text_input("Enter Your Name:", value=st.session_state.get("annotator_name", ""))
@@ -78,17 +79,24 @@ with st.sidebar:
             st.metric("Chats You Have Reviewed", my_subs)
 
     st.divider()
-    st.header("📥 Researcher Export")
-    if not df_annotations.empty:
-        st.download_button(
-            label="Download All Results (CSV)",
-            data=df_annotations.to_csv(index=False).encode("utf-8"),
-            file_name="collected_annotations.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    st.header("🔒 Researcher Export (Protected)")
+    entered_pwd = st.text_input("Enter Researcher Password to Download:", type="password")
+    if entered_pwd == ADMIN_PASSWORD:
+        st.success("🔓 Admin Unlocked!")
+        if not df_annotations.empty:
+            st.download_button(
+                label="📥 Download All Results (CSV)",
+                data=df_annotations.to_csv(index=False).encode("utf-8"),
+                file_name="collected_annotations.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.caption("No annotations collected yet.")
+    elif entered_pwd:
+        st.error("❌ Incorrect password.")
     else:
-        st.caption("No annotations collected yet.")
+        st.caption("Regular participants cannot access or download research data.")
 
 if not annotator_name:
     st.info("👈 **Please enter your Name in the left sidebar to start reviewing chats.**")
