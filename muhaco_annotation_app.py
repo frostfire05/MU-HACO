@@ -57,7 +57,7 @@ with st.expander("📖 HOW TO PARTICIPATE (Simple 1-Minute Guide — Click to Re
     4. **Answer Question 3:** Compare your answer with our automated computer summary to see if the computer got it right.
     """)
 
-# Sidebar: Friendly identification
+# Sidebar: Friendly identification & Download
 with st.sidebar:
     st.header("👤 Your Details")
     annotator_name = st.text_input("Enter Your Name:", value=st.session_state.get("annotator_name", ""))
@@ -71,10 +71,24 @@ with st.sidebar:
         completed_convos = sum(1 for item in pool if counts.get(item["conversation_id"], 0) >= MAX_ANNOTATIONS_PER_CONVO)
         st.progress(completed_convos / len(pool))
         st.write(f"**Completed Chats:** {completed_convos} of {len(pool)}")
+        st.write(f"**Total Submissions:** {len(df_annotations)}")
         
         if annotator_name:
             my_subs = len(df_annotations[df_annotations["annotator_name"] == annotator_name]) if not df_annotations.empty else 0
             st.metric("Chats You Have Reviewed", my_subs)
+
+    st.divider()
+    st.header("📥 Researcher Export")
+    if not df_annotations.empty:
+        st.download_button(
+            label="Download All Results (CSV)",
+            data=df_annotations.to_csv(index=False).encode("utf-8"),
+            file_name="collected_annotations.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    else:
+        st.caption("No annotations collected yet.")
 
 if not annotator_name:
     st.info("👈 **Please enter your Name in the left sidebar to start reviewing chats.**")
