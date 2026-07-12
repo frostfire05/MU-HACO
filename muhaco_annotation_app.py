@@ -37,7 +37,7 @@ df_annotations = load_annotations()
 
 st.title("💡 AI Advice Study — Human Opinion Portal")
 
-# Simple, friendly, jargon-free instructions
+# Simple, friendly instructions
 with st.expander("📖 HOW TO PARTICIPATE (Simple 1-Minute Guide — Click to Read)", expanded=True):
     st.markdown("""
     ### Thank you for helping with our university research!
@@ -92,6 +92,36 @@ available_convos = [
 
 if not available_convos:
     st.success("🎉 Amazing! You have reviewed all available chats for this study. Thank you so much for your help!")
+    st.stop()
+
+# Check if user just submitted and is deciding whether to continue or exit
+if st.session_state.get("just_submitted", False):
+    st.markdown("---")
+    my_subs = len(df_annotations[df_annotations["annotator_name"] == annotator_name]) if not df_annotations.empty else 0
+    st.success(f"🎉 **Thank you, {annotator_name}!** Your review has been saved successfully. You have reviewed **{my_subs}** chat(s) so far.")
+    st.write("Would you like to review another chat, or finish your session for now?")
+    
+    col_a, col_b = st.columns([1, 1], gap="medium")
+    with col_a:
+        if st.button("➡️ Continue & Review Another Chat", use_container_width=True, type="primary"):
+            st.session_state["just_submitted"] = False
+            st.session_state["current_cid"] = random.choice(available_convos)["conversation_id"]
+            st.rerun()
+    with col_b:
+        if st.button("🛑 Finish & Exit Session", use_container_width=True):
+            st.session_state["session_finished"] = True
+            st.session_state["just_submitted"] = False
+            st.rerun()
+    st.stop()
+
+if st.session_state.get("session_finished", False):
+    st.markdown("---")
+    st.balloons()
+    st.header("🙏 Thank You So Much for Your Help!")
+    st.write(f"Your contributions have been securely saved. You can safely close this browser window or tab now.")
+    if st.button("🔄 Start a New Session"):
+        st.session_state["session_finished"] = False
+        st.rerun()
     st.stop()
 
 # Pick current active conversation
@@ -154,7 +184,7 @@ with col2:
         )
         
         col_sub1, col_sub2 = st.columns([1, 1])
-        submitted = st.form_submit_button("✅ Submit & Next Chat", use_container_width=True, type="primary")
+        submitted = st.form_submit_button("✅ Submit Annotation", use_container_width=True, type="primary")
     
     if st.button("🔀 Skip / Show Another Chat", use_container_width=True):
         st.session_state["current_cid"] = random.choice(available_convos)["conversation_id"]
@@ -175,8 +205,5 @@ with col2:
                 "q3_ai_match": q3
             }
             save_annotation(record)
-            st.toast("🎉 Saved successfully!")
-            remaining = [c for c in available_convos if c["conversation_id"] != current_item["conversation_id"]]
-            if remaining:
-                st.session_state["current_cid"] = random.choice(remaining)["conversation_id"]
+            st.session_state["just_submitted"] = True
             st.rerun()
