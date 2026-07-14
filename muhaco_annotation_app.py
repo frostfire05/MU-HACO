@@ -296,14 +296,14 @@ current_item = next(i for i in available if i["conversation_id"] == st.session_s
 suggestions = current_item.get("suggestions", [])
 
 # Layout
-col1, col2 = st.columns([1.1, 0.9], gap="large")
+col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     risk_badge = "🔴 High Risk" if current_item.get("risk_level") == "high" else "🟡 Medium Risk"
     st.subheader(f"💬 {current_item.get('decision_topic', 'Unknown').title()} Conversation")
     st.markdown(f"🌍 **Country:** `{current_item.get('country', 'Unknown')}` &nbsp;|&nbsp; {risk_badge} &nbsp;|&nbsp; 💬 **Messages:** `{current_item.get('n_turns', '?')}`")
 
-    with st.container(border=True, height=580):
+    with st.container(border=True, height=640):
         for turn in current_item.get("turns", []):
             if turn.get("role") == "user":
                 with st.chat_message("user", avatar="🧑"):
@@ -321,7 +321,8 @@ with col1:
                     st.markdown(content)
 
 with col2:
-    st.subheader(f"📝 Rate Each AI Suggestion ({len(suggestions)} found)")
+    st.subheader(f"📝 Rate AI Suggestions ({len(suggestions)} found)")
+    st.caption("Click through the tabs below to rate each recommendation made by the AI:")
 
     if not suggestions:
         st.warning("No suggestions were extracted from this conversation.")
@@ -332,67 +333,71 @@ with col2:
 
     with st.form(key=f"form_{current_item['conversation_id']}", clear_on_submit=False):
         all_ratings = []
+        tabs = st.tabs([f"💡 Suggestion {s.get('suggestion_id', i + 1)}" for i, s in enumerate(suggestions)])
 
-        for i, suggestion in enumerate(suggestions):
+        for i, (suggestion, tab) in enumerate(zip(suggestions, tabs)):
             sid = suggestion.get("suggestion_id", i + 1)
             text = suggestion.get("text", "")
 
-            st.markdown(f"---")
-            st.markdown(f"#### Suggestion {sid}")
-            st.info(f"**\"{text}\"**")
+            with tab:
+                st.markdown(f"### Suggestion #{sid}")
+                st.info(f"**\"{text}\"**")
 
-            not_decision = st.checkbox(
-                "⛔ Not a decision option (skip ratings below)",
-                key=f"notdec_{current_item['conversation_id']}_{sid}"
-            )
-
-            if not not_decision:
-                short_util = st.radio(
-                    "Short-term utility (within ~1 week):",
-                    options=list(UTILITY_OPTIONS.keys()),
-                    index=None,
-                    key=f"short_{current_item['conversation_id']}_{sid}",
-                    horizontal=True
+                not_decision = st.checkbox(
+                    "⛔ Not an actionable decision option (check to skip rating this item)",
+                    key=f"notdec_{current_item['conversation_id']}_{sid}"
                 )
 
-                long_util = st.radio(
-                    "Long-term utility (~1 month or more):",
-                    options=list(UTILITY_OPTIONS.keys()),
-                    index=None,
-                    key=f"long_{current_item['conversation_id']}_{sid}",
-                    horizontal=True
-                )
+                if not not_decision:
+                    st.markdown("---")
+                    c_u1, c_u2 = st.columns(2)
+                    with c_u1:
+                        short_util = st.radio(
+                            "**Short-term utility (~1 week):**",
+                            options=list(UTILITY_OPTIONS.keys()),
+                            index=None,
+                            key=f"short_{current_item['conversation_id']}_{sid}"
+                        )
+                    with c_u2:
+                        long_util = st.radio(
+                            "**Long-term utility (~1 month+):**",
+                            options=list(UTILITY_OPTIONS.keys()),
+                            index=None,
+                            key=f"long_{current_item['conversation_id']}_{sid}"
+                        )
 
-                regret = st.radio(
-                    "Regret risk:",
-                    options=list(REGRET_OPTIONS.keys()),
-                    index=None,
-                    key=f"regret_{current_item['conversation_id']}_{sid}",
-                    horizontal=True
-                )
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    c_r1, c_r2 = st.columns(2)
+                    with c_r1:
+                        regret = st.radio(
+                            "**Regret risk:**",
+                            options=list(REGRET_OPTIONS.keys()),
+                            index=None,
+                            key=f"regret_{current_item['conversation_id']}_{sid}"
+                        )
+                    with c_r2:
+                        confidence = st.radio(
+                            "**Your confidence:**",
+                            options=CONFIDENCE_OPTIONS,
+                            index=None,
+                            key=f"conf_{current_item['conversation_id']}_{sid}",
+                            horizontal=True
+                        )
+                else:
+                    short_util = None
+                    long_util = None
+                    regret = None
+                    confidence = None
 
-                confidence = st.radio(
-                    "Your confidence in these ratings:",
-                    options=CONFIDENCE_OPTIONS,
-                    index=None,
-                    key=f"conf_{current_item['conversation_id']}_{sid}",
-                    horizontal=True
-                )
-            else:
-                short_util = None
-                long_util = None
-                regret = None
-                confidence = None
-
-            all_ratings.append({
-                "sid": sid,
-                "text": text,
-                "not_decision": not_decision,
-                "short_util": short_util,
-                "long_util": long_util,
-                "regret": regret,
-                "confidence": confidence
-            })
+                all_ratings.append({
+                    "sid": sid,
+                    "text": text,
+                    "not_decision": not_decision,
+                    "short_util": short_util,
+                    "long_util": long_util,
+                    "regret": regret,
+                    "confidence": confidence
+                })
 
         st.markdown("---")
         submitted = st.form_submit_button("✅ Submit All Ratings for This Conversation", use_container_width=True, type="primary")
