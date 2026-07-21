@@ -4,18 +4,16 @@ import json
 import os
 import random
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection  # <-- 1. IMPORT ADDED
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="AI Advice Quality Study", layout="wide")
 
-# 2. INITIALIZE GOOGLE SHEETS CONNECTION
-# This securely reads the credentials from your .streamlit/secrets.toml file
+# Initialize persistent Google Sheets connection
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 POOL_FILE = "muhaco_extracted_suggestions.json"
-# We keep OUTPUT_CSV as a fallback filename for downloading from the dashboard
 OUTPUT_CSV = "collected_annotations.csv"
-MAX_ANNOTATIONS_PER_CONVO = 3
+MAX_ANNOTATIONS_PER_CONVO = 1  # Strictly ONE review per conversation across all users
 ADMIN_NAME = "Vibhan Dutta"
 ADMIN_PASSWORD = "researcher2026"
 
@@ -45,19 +43,15 @@ def load_pool():
         return json.load(f)
 
 
-# 3. UPDATED TO LOAD FROM GOOGLE SHEETS
 def load_annotations():
     try:
-        # ttl=0 forces it to always fetch live data instead of using a stale cache
+        # ttl=0 disables caching so the app always fetches the latest live rows from Google Sheets
         df = conn.read(worksheet="Sheet1", ttl=0)
-        # Drop completely empty rows if they exist
         return df.dropna(how="all") if not df.empty else pd.DataFrame()
     except Exception:
-        # If the sheet is empty or uninitialized, return an empty DataFrame
         return pd.DataFrame()
 
 
-# 4. UPDATED TO SAVE DIRECTLY TO GOOGLE SHEETS
 def save_annotations(rows):
     df_existing = load_annotations()
     df_new = pd.DataFrame(rows)
@@ -67,7 +61,7 @@ def save_annotations(rows):
     else:
         df_combined = df_new
         
-    # Pushes the combined dataframe directly to Google Sheets
+    # Push updated dataset directly to Google Sheets
     conn.update(worksheet="Sheet1", data=df_combined)
 
 
@@ -143,7 +137,7 @@ if is_admin and not st.session_state.get("admin_annotate_mode", False):
     with col_s2:
         st.metric("Conversations Touched", len(counts))
     with col_s3:
-        st.metric("Fully Done (3/3)", f"{completed} / {len(pool)}")
+        st.metric("Fully Done (1/1)", f"{completed} / {len(pool)}")
     with col_s4:
         unique_annotators = df_annotations["annotator_name"].nunique() if not df_annotations.empty else 0
         st.metric("Active Annotators", unique_annotators)
@@ -264,25 +258,28 @@ with col_top3:
 
 st.info("🧠 **Reminder:** Judge each AI suggestion on its own merits. Ask yourself: *If the user followed this advice, how useful would it be, and might they regret it?*")
 
-# Filter available conversations
-my_annotated_cids = set(
-    df_annotations[df_annotations["annotator_name"] == annotator_name]["conversation_id"]
-) if not df_annotations.empty else set()
+# Filter available conversations globally across all users
+if not df_annotations.empty:
+    convo_counts = df_annotations["conversation_id"].value_counts()
+    # Excludes any conversation ID that has been annotated at least once by anyone
+    excluded_cids = set(convo_counts[convo_counts >= MAX_ANNOTATIONS_PER_CONVO].index)
+else:
+    excluded_cids = set()
 
-available = [item for item in pool if item["conversation_id"] not in my_annotated_cids]
+available = [item for item in pool if item["conversation_id"] not in excluded_cids]
 
 if not available:
-    st.success("🎉 Amazing! You have reviewed all available conversations. Thank you so much for your help!")
+    st.success("🎉 Amazing! All available conversations in the dataset have been fully reviewed. Thank you so much for your help!")
     st.balloons()
     st.stop()
 
 # Post-submission screen
 if st.session_state.get("just_submitted", False):
     st.markdown("---")
-    st.success(f"🎉 **Thank you, {annotator_name}!** Your review has been saved. You have completed **{my_done}** conversation(s) so far.")
+    st.success(f"🎉 **Thank you, {annotator_name}!** Your review has been saved to Google Sheets. You have completed **{my_done}** conversation(s) so far.")
     remaining = len(available)
     if remaining > 0:
-        st.write(f"There are **{remaining}** conversations still available for you to review.")
+        st.write(f"There are **{remaining}** conversations still available to be reviewed.")
     st.write("Would you like to continue or finish for now?")
 
     col_ca, col_cb = st.columns(2, gap="medium")
@@ -426,7 +423,6 @@ with col2:
         st.rerun()
 
     if submitted:
-        # Validate: each non-skipped suggestion must have all fields filled
         valid = True
         for r in all_ratings:
             if not r["not_decision"]:
