@@ -4,10 +4,16 @@ import json
 import os
 import random
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection  # <-- 1. IMPORT ADDED
 
 st.set_page_config(page_title="AI Advice Quality Study", layout="wide")
 
+# 2. INITIALIZE GOOGLE SHEETS CONNECTION
+# This securely reads the credentials from your .streamlit/secrets.toml file
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 POOL_FILE = "muhaco_extracted_suggestions.json"
+# We keep OUTPUT_CSV as a fallback filename for downloading from the dashboard
 OUTPUT_CSV = "collected_annotations.csv"
 MAX_ANNOTATIONS_PER_CONVO = 3
 ADMIN_NAME = "Vibhan Dutta"
@@ -39,17 +45,30 @@ def load_pool():
         return json.load(f)
 
 
+# 3. UPDATED TO LOAD FROM GOOGLE SHEETS
 def load_annotations():
-    if not os.path.exists(OUTPUT_CSV):
+    try:
+        # ttl=0 forces it to always fetch live data instead of using a stale cache
+        df = conn.read(worksheet="Sheet1", ttl=0)
+        # Drop completely empty rows if they exist
+        return df.dropna(how="all") if not df.empty else pd.DataFrame()
+    except Exception:
+        # If the sheet is empty or uninitialized, return an empty DataFrame
         return pd.DataFrame()
-    return pd.read_csv(OUTPUT_CSV)
 
 
+# 4. UPDATED TO SAVE DIRECTLY TO GOOGLE SHEETS
 def save_annotations(rows):
     df_existing = load_annotations()
     df_new = pd.DataFrame(rows)
-    df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-    df_combined.to_csv(OUTPUT_CSV, index=False, encoding="utf-8")
+    
+    if not df_existing.empty:
+        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+    else:
+        df_combined = df_new
+        
+    # Pushes the combined dataframe directly to Google Sheets
+    conn.update(worksheet="Sheet1", data=df_combined)
 
 
 pool = load_pool()
